@@ -1,237 +1,76 @@
 const express = require('express');
-const puppeteer = require('puppeteer');
+const puppeteer = require('puppeteer-extra');
+const StealthPlugin = require('puppeteer-extra-plugin-stealth');
+
+// Use stealth to prevent being blocked by Cloudflare/distil
+puppeteer.use(StealthPlugin());
 
 const app = express();
+app.use(express.json());
+
 const PORT = process.env.PORT || 3000;
 
-// Environment variables
-const LOGISLY_EMAIL = process.env.LOGISLY_EMAIL;
-const LOGISLY_PASSWORD = process.env.LOGISLY_PASSWORD;
-const API_KEY = process.env.API_KEY || 'change-this-key';
-const LOGISLY_LOGIN_URL = process.env.LOGISLY_LOGIN_URL || 'https://logisly.com/login';
-const LOGISLY_ORDERS_URL = process.env.LOGISLY_ORDERS_URL || 'https://logisly.com/open-orders';
+app.post('/scrape', async (req, res) => {
+    const { url } = req.body;
 
-// API Key middleware
-function requireApiKey(req, res, next) {
-  const apiKey = req.headers['x-api-key'];
-  
-  if (!apiKey || apiKey !== API_KEY) {
-    return res.status(401).json({
-      success: false,
-      error: 'Unauthorized',
-      message: 'Invalid or missing API key'
-    });
-  }
-  
-  next();
-}
-
-// Health check endpoint
-app.get('/health', (req, res) => {
-  res.json({ 
-    status: 'ok',
-    service: 'Logisly Scraper',
-    version: '1.0.0'
-  });
-});
-
-// Main scrape endpoint
-app.get('/scrape', requireApiKey, async (req, res) => {
-  let browser;
-  
-  try {
-    console.log('🚀 Starting scrape...');
-    
-    // Validate credentials
-    if (!LOGISLY_EMAIL || !LOGISLY_PASSWORD) {
-      throw new Error('Missing Logisly credentials in environment variables');
+    if (!url) {
+        return res.status(400).json({ success: false, error: "URL is required" });
     }
-    
-    // Launch browser
-    browser = await puppeteer.launch({
-      headless: process.env.HEADLESS !== 'false',
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-gpu'
-      ]
-    });
-    
-    const page = await browser.newPage();
-    
-    // Set viewport
-    await page.setViewport({ width: 1920, height: 1080 });
-    
-    console.log('📝 Navigating to login page...');
-    
-    // Go to login page
-    await page.goto(LOGISLY_LOGIN_URL, {
-      waitUntil: 'networkidle2',
-      timeout: 30000
-    });
-    
-    console.log('🔐 Logging in...');
-    
-    // Fill email
-    await page.waitForSelector('input[type="email"], input[name="email"]', { timeout: 10000 });
-    await page.type('input[type="email"], input[name="email"]', LOGISLY_EMAIL);
-    
-    // Fill password
-    await page.type('input[type="password"]', LOGISLY_PASSWORD);
-    
-    // Click login button - use evaluate to find by text
-    await page.evaluate(() => {
-      const buttons = Array.from(document.querySelectorAll('button, input[type="submit"]'));
-      const loginButton = buttons.find(btn => {
-        const text = btn.textContent || btn.value || '';
-        return text.toLowerCase().includes('login') || 
-               text.toLowerCase().includes('masuk') || 
-               btn.type === 'submit';
-      });
-      if (loginButton) loginButton.click();
-    });
-    
-    // Wait for navigation
-    await page.waitForNavigation({ 
-      waitUntil: 'networkidle2',
-      timeout: 15000
-    });
-    
-    console.log('✅ Login successful');
-    
-    // Navigate to orders page
-    console.log('📋 Loading orders page...');
-    await page.goto(LOGISLY_ORDERS_URL, {
-      waitUntil: 'networkidle2',
-      timeout: 60000
-    });
-    
-    // Wait for orders table
-    await page.waitForSelector('table, .orders-list, [class*="order"]', { timeout: 10000 });
-    
-    // Try clicking Non-SPX tab if exists
+
+    let browser;
     try {
-      // Use evaluate to find by text
-      const clicked = await page.evaluate(() => {
-        const elements = Array.from(document.querySelectorAll('button, a, div[role="button"]'));
-        const nonSpxElement = elements.find(el => {
-          const text = el.textContent || '';
-          return text.includes('Non-SPX');
+        // 1. Launch with optimized flags for Railway/Docker
+        browser = await puppeteer.launch({
+            headless: "new",
+            args: [
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage', // Prevents crashes in low-memory environments
+                '--disable-accelerated-2d-canvas',
+                '--no-first-run',
+                '--no-zygote',
+                '--disable-gpu'
+            ]
         });
-        if (nonSpxElement) {
-          nonSpxElement.click();
-          return true;
+
+        const page = await browser.newPage();
+
+        // 2. Set a realistic User-Agent
+        await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+
+        // 3. Optimized Navigation
+        // We increase timeout to 60s and use 'networkidle2' (wait until only 2 active connections)
+        console.log(`Navigating to: ${url}`);
+        await page.goto(url, {
+            waitUntil: 'networkidle2',
+            timeout: 60000 
+        });
+
+        // 4. Extract Data (Example: Title and Page Content)
+        const data = await page.evaluate(() => {
+            return {
+                title: document.title,
+                html: document.body.innerText.substring(0, 1000), // First 1000 chars
+            };
+        });
+
+        res.json({ success: true, data });
+
+    } catch (error) {
+        console.error("Scraping Error:", error.message);
+        res.status(500).json({
+            success: false,
+            error: error.message,
+            details: "Timeout likely caused by slow target site or anti-bot challenge."
+        });
+    } finally {
+        // 5. CRITICAL: Always close the browser to prevent Railway memory leaks
+        if (browser) {
+            await browser.close();
         }
-        return false;
-      });
-      
-      if (clicked) {
-        console.log('📌 Clicked Non-SPX tab...');
-        await new Promise(resolve => setTimeout(resolve, 2000));
-      }
-    } catch (e) {
-      console.log('ℹ️ Non-SPX tab not found or not needed');
     }
-    
-    // Extract orders
-    console.log('📊 Extracting orders...');
-    
-    const orders = await page.evaluate(() => {
-      const rows = Array.from(document.querySelectorAll('table tr, [class*="order-row"]'));
-      const extractedOrders = [];
-      let index = 0;
-      
-      rows.forEach(row => {
-        const cells = Array.from(row.querySelectorAll('td'));
-        
-        if (cells.length >= 6) {
-          const shipper = cells[0]?.innerText?.trim() || '';
-          const datetime = cells[1]?.innerText?.trim() || '';
-          const route = cells[2]?.innerText?.trim() || '';
-          const truck = cells[3]?.innerText?.trim() || '';
-          const priceText = cells[4]?.innerText?.trim() || '';
-          const status = cells[5]?.innerText?.trim() || '';
-          
-          // Skip header rows
-          if (shipper.toLowerCase().includes('shipper') || !shipper) return;
-          
-          // Parse price
-          const price = parseInt(priceText.replace(/[^0-9]/g, '')) || 0;
-          if (price === 0) return;
-          
-          // Parse route
-          const [asal, tujuan] = route.split('-').map(s => s.trim());
-          
-          // Parse datetime
-          const dateMatch = datetime.match(/(\d+)\s+(\w+)\s+(\d+:\d+)/);
-          const hari = dateMatch ? dateMatch[1] : '';
-          const bulan = dateMatch ? dateMatch[2] : '';
-          const jam = dateMatch ? dateMatch[3] : '';
-          
-          // Estimate tonnage
-          let tonase = 5;
-          const truckLower = truck.toLowerCase();
-          if (truckLower.includes('tronton')) tonase = 15;
-          else if (truckLower.includes('wb') || truckLower.includes('wingbox')) tonase = 8;
-          else if (truckLower.includes('cddl')) tonase = 5;
-          else if (truckLower.includes('cde')) tonase = 3;
-          
-          extractedOrders.push({
-            jobId: `LOGISLY-${Date.now()}-${index++}`,
-            shipper: shipper,
-            tanggal: `${hari} ${bulan} 2025`,
-            jamMuat: jam,
-            jam: jam,
-            asal: asal || '',
-            tujuan: tujuan || '',
-            rute: route,
-            tipeTruk: truck,
-            jenisKendaraan: truck,
-            hargaPenawaran: price,
-            harga: price,
-            tonase: tonase,
-            status: status,
-            contact: shipper,
-            deadline: datetime,
-            jenisBarang: 'General Cargo'
-          });
-        }
-      });
-      
-      return extractedOrders;
-    });
-    
-    await browser.close();
-    
-    console.log(`✅ Scraped ${orders.length} orders successfully`);
-    
-    res.json({
-      success: true,
-      orders: orders,
-      totalOrders: orders.length,
-      scrapedAt: new Date().toISOString()
-    });
-    
-  } catch (error) {
-    console.error('❌ Scraping error:', error);
-    
-    if (browser) {
-      await browser.close();
-    }
-    
-    res.status(500).json({
-      success: false,
-      error: error.message,
-      details: error.stack
-    });
-  }
 });
 
-// Start server
 app.listen(PORT, () => {
-  console.log(`🚀 Logisly Scraper running on port ${PORT}`);
-  console.log(`📍 Health check: http://localhost:${PORT}/health`);
-  console.log(`📍 Scrape endpoint: http://localhost:${PORT}/scrape`);
-  console.log(`🔐 API Key required: X-API-Key header`);
+    console.log(`Scraper service listening on port ${PORT}`);
 });
