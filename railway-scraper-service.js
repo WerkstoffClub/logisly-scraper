@@ -8,8 +8,8 @@ const PORT = process.env.PORT || 3000;
 const LOGISLY_EMAIL = process.env.LOGISLY_EMAIL;
 const LOGISLY_PASSWORD = process.env.LOGISLY_PASSWORD;
 const API_KEY = process.env.API_KEY || 'change-this-key';
-const LOGISLY_LOGIN_URL = process.env.LOGISLY_LOGIN_URL || 'https://logisly.com/login';
-const LOGISLY_ORDERS_URL = process.env.LOGISLY_ORDERS_URL || 'https://logisly.com/open-orders';
+const LOGISLY_LOGIN_URL = process.env.LOGISLY_LOGIN_URL || 'https://transporter.logisly.com/site/login';
+const LOGISLY_ORDERS_URL = process.env.LOGISLY_ORDERS_URL || 'https://transporter.logisly.com/open-orders';
 
 // API Key middleware
 function requireApiKey(req, res, next) {
