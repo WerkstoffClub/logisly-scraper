@@ -104,7 +104,7 @@ app.get('/scrape', requireApiKey, async (req, res) => {
     console.log('📋 Loading orders page...');
     await page.goto(LOGISLY_ORDERS_URL, {
       waitUntil: 'networkidle2',
-      timeout: 30000
+      timeout: 60000
     });
     
     // Wait for orders table
