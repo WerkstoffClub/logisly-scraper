@@ -7,9 +7,9 @@ const PORT = process.env.PORT || 3000;
 // Environment variables
 const LOGISLY_EMAIL = process.env.LOGISLY_EMAIL;
 const LOGISLY_PASSWORD = process.env.LOGISLY_PASSWORD;
-const API_KEY = process.env.API_KEY || 'change-this-key';
-const LOGISLY_LOGIN_URL = process.env.LOGISLY_LOGIN_URL || 'https://logisly.com/login';
-const LOGISLY_ORDERS_URL = process.env.LOGISLY_ORDERS_URL || 'https://logisly.com/open-orders';
+const API_KEY = process.env.API_KEY || '3c42b9a8bc3adc6cbcdef5c7eb765aaca18098b8d92e2b4e41b5dc500d9d1e92';
+const LOGISLY_LOGIN_URL = process.env.LOGISLY_LOGIN_URL || 'https://transporter.logisly.com/site/login';
+const LOGISLY_ORDERS_URL = process.env.LOGISLY_ORDERS_URL || 'https://transporter.logisly.com/open-orders';
 
 // API Key middleware
 function requireApiKey(req, res, next) {
