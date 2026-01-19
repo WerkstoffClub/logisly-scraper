@@ -7,9 +7,9 @@ const PORT = process.env.PORT || 3000;
 // Environment variables
 const LOGISLY_EMAIL = process.env.LOGISLY_EMAIL;
 const LOGISLY_PASSWORD = process.env.LOGISLY_PASSWORD;
-const API_KEY = process.env.API_KEY || '3c42b9a8bc3adc6cbcdef5c7eb765aaca18098b8d92e2b4e41b5dc500d9d1e92';
-const LOGISLY_LOGIN_URL = process.env.LOGISLY_LOGIN_URL || 'https://transporter.logisly.com/site/login';
-const LOGISLY_ORDERS_URL = process.env.LOGISLY_ORDERS_URL || 'https://transporter.logisly.com/open-orders';
+const API_KEY = process.env.API_KEY || 'change-this-key';
+const LOGISLY_LOGIN_URL = process.env.LOGISLY_LOGIN_URL || 'https://logisly.com/login';
+const LOGISLY_ORDERS_URL = process.env.LOGISLY_ORDERS_URL || 'https://logisly.com/open-orders';
 
 // API Key middleware
 function requireApiKey(req, res, next) {
@@ -80,14 +80,17 @@ app.get('/scrape', requireApiKey, async (req, res) => {
     // Fill password
     await page.type('input[type="password"]', LOGISLY_PASSWORD);
     
-    // Click login button - use XPath for text matching
-    const loginButton = await page.$x("//button[contains(text(), 'Login') or contains(text(), 'Masuk') or @type='submit']");
-    if (loginButton.length > 0) {
-      await loginButton[0].click();
-    } else {
-      // Fallback: just click any submit button
-      await page.click('button[type="submit"]');
-    }
+    // Click login button - use evaluate to find by text
+    await page.evaluate(() => {
+      const buttons = Array.from(document.querySelectorAll('button, input[type="submit"]'));
+      const loginButton = buttons.find(btn => {
+        const text = btn.textContent || btn.value || '';
+        return text.toLowerCase().includes('login') || 
+               text.toLowerCase().includes('masuk') || 
+               btn.type === 'submit';
+      });
+      if (loginButton) loginButton.click();
+    });
     
     // Wait for navigation
     await page.waitForNavigation({ 
@@ -109,11 +112,22 @@ app.get('/scrape', requireApiKey, async (req, res) => {
     
     // Try clicking Non-SPX tab if exists
     try {
-      // Use XPath for text matching
-      const nonSpxButton = await page.$x("//button[contains(text(), 'Non-SPX')] | //a[contains(text(), 'Non-SPX')]");
-      if (nonSpxButton.length > 0) {
-        console.log('📌 Clicking Non-SPX tab...');
-        await nonSpxButton[0].click();
+      // Use evaluate to find by text
+      const clicked = await page.evaluate(() => {
+        const elements = Array.from(document.querySelectorAll('button, a, div[role="button"]'));
+        const nonSpxElement = elements.find(el => {
+          const text = el.textContent || '';
+          return text.includes('Non-SPX');
+        });
+        if (nonSpxElement) {
+          nonSpxElement.click();
+          return true;
+        }
+        return false;
+      });
+      
+      if (clicked) {
+        console.log('📌 Clicked Non-SPX tab...');
         await new Promise(resolve => setTimeout(resolve, 2000));
       }
     } catch (e) {
