@@ -8,8 +8,8 @@ const PORT = process.env.PORT || 3000;
 const LOGISLY_EMAIL = process.env.LOGISLY_EMAIL;
 const LOGISLY_PASSWORD = process.env.LOGISLY_PASSWORD;
 const API_KEY = process.env.API_KEY || 'change-this-key';
-const LOGISLY_LOGIN_URL = process.env.LOGISLY_LOGIN_URL || 'https://transporter.logisly.com/site/login';
-const LOGISLY_ORDERS_URL = process.env.LOGISLY_ORDERS_URL || 'https://transporter.logisly.com/open-orders';
+const LOGISLY_LOGIN_URL = process.env.LOGISLY_LOGIN_URL || 'https://logisly.com/login';
+const LOGISLY_ORDERS_URL = process.env.LOGISLY_ORDERS_URL || 'https://logisly.com/open-orders';
 
 // API Key middleware
 function requireApiKey(req, res, next) {
@@ -80,8 +80,14 @@ app.get('/scrape', requireApiKey, async (req, res) => {
     // Fill password
     await page.type('input[type="password"]', LOGISLY_PASSWORD);
     
-    // Click login button
-    await page.click('button[type="submit"], button:has-text("Login"), button:has-text("Masuk")');
+    // Click login button - use XPath for text matching
+    const loginButton = await page.$x("//button[contains(text(), 'Login') or contains(text(), 'Masuk') or @type='submit']");
+    if (loginButton.length > 0) {
+      await loginButton[0].click();
+    } else {
+      // Fallback: just click any submit button
+      await page.click('button[type="submit"]');
+    }
     
     // Wait for navigation
     await page.waitForNavigation({ 
@@ -103,11 +109,12 @@ app.get('/scrape', requireApiKey, async (req, res) => {
     
     // Try clicking Non-SPX tab if exists
     try {
-      const nonSpxButton = await page.$('button:has-text("Non-SPX"), a:has-text("Non-SPX")');
-      if (nonSpxButton) {
+      // Use XPath for text matching
+      const nonSpxButton = await page.$x("//button[contains(text(), 'Non-SPX')] | //a[contains(text(), 'Non-SPX')]");
+      if (nonSpxButton.length > 0) {
         console.log('📌 Clicking Non-SPX tab...');
-        await nonSpxButton.click();
-        await page.waitForTimeout(2000);
+        await nonSpxButton[0].click();
+        await new Promise(resolve => setTimeout(resolve, 2000));
       }
     } catch (e) {
       console.log('ℹ️ Non-SPX tab not found or not needed');
