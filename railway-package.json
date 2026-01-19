@@ -1,0 +1,23 @@
+{
+  "name": "logisly-scraper-railway",
+  "version": "1.0.0",
+  "description": "Logisly scraper service with Puppeteer for Railway deployment",
+  "main": "railway-scraper-service.js",
+  "scripts": {
+    "start": "node railway-scraper-service.js",
+    "dev": "nodemon railway-scraper-service.js"
+  },
+  "keywords": ["scraper", "puppeteer", "logisly", "railway"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "puppeteer": "^21.6.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
